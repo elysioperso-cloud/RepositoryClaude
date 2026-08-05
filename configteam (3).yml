@@ -1,0 +1,20 @@
+package fr.timeo.lumidiscord.minecraft.team;
+
+public enum TeamPermission {
+    ACCESS_CHEST("Accéder au coffre"),
+    INVITE_MEMBERS("Inviter des joueurs"),
+    KICK_MEMBERS("Exclure des membres"),
+    MANAGE_ROLES("Gérer les rôles"),
+    MANAGE_TEAM("Gérer la team (préfixe, couleur, etc.)"),
+    MANAGE_MEMBERS("Gérer les membres (grades, lead)"); // Nouvelle permission pour gérer les membres
+
+    private final String description;
+
+    TeamPermission(String description) {
+        this.description = description;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+}

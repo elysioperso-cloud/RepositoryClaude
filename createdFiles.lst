@@ -1,0 +1,73 @@
+name: LumiDiscord
+main: fr.timeo.lumidiscord.LumiDiscord
+version: '1.0.0'
+api-version: '1.21'
+author: NeoHawk_
+description: Passerelle Minecraft-Discord avec XP, homes, statistiques et API HTTP.
+
+commands:
+  linkdiscord:
+    description: Lie un compte Minecraft à un compte Discord
+    usage: /linkdiscord
+    aliases: [ld]
+  xpdiscord:
+    description: "Affiche votre niveau et votre XP LumiDiscord. (Admins: /xpdiscord reload)"
+    usage: /xpdiscord [reload]
+  xptop:
+    description: Affiche le classement des 10 meilleurs joueurs
+    usage: /xptop
+  sethome:
+    description: Définir un home si le niveau requis est atteint
+    usage: /sethome
+  home:
+    description: Se téléporter à son home
+    usage: /home
+  spawn:
+    description: Se téléporter au spawn de l'Overworld après un délai
+    usage: /spawn
+  delhome:
+    description: Supprimer son home
+    usage: /delhome
+  team:
+    description: Gestion des équipes dynamiques
+    usage: /team
+    aliases: [t]
+  givexp:
+    description: Donne de l'XP à un joueur
+    usage: /givexp <joueur> <montant>
+    permission: lumidiscord.admin.givexp
+  ungivexp:
+    description: Retire de l'XP à un joueur sans révoquer les récompenses
+    usage: /ungivexp <joueur> <montant>
+    permission: lumidiscord.admin.givexp
+  war:
+    description: Commandes d'administration des guerres
+    usage: /war
+    permission: lumidiscord.admin
+  assault:
+    description: Lancer l'assaut de sa faction
+    usage: /assault
+  daycount:
+    description: Affiche le nombre de jours du serveur au dessus de la hotbar
+    usage: /daycount <show|hide>
+  afk:
+    description: Active le mode AFK pour ne plus avoir faim
+    usage: /afk
+  adminxp:
+    description: Gérer l'XP des équipes (Admin)
+    usage: /adminxp <give|remove> <team> <nombre>
+    permission: lumidiscord.admin
+
+permissions:
+  lumidiscord.home:
+    description: Autorise l'utilisation des commandes /sethome, /home et /delhome
+    default: true
+  lumidiscord.admin:
+    description: Autorise la gestion du plugin
+    default: op
+  lumidiscord.admin.givexp:
+    description: Autorise l'utilisation des commandes /givexp et /ungivexp
+    default: op
+  dynamicteam.admin:
+    description: Accès aux commandes administrateur des équipes
+    default: op

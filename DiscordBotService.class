@@ -1,0 +1,62 @@
+package fr.timeo.lumidiscord.minecraft.war;
+
+public class WarData {
+    private final String team1Name;
+    private final String team2Name;
+    private final String reason;
+    private WarStatus status;
+    private String reward;
+    private int totalAssaults;
+    private int team1Points; // Points dans la manche actuelle
+    private int team2Points;
+    private int team1Manches; // Nombre de manches gagnées au total
+    private int team2Manches;
+    private int currentAssault;
+    private int pointsToWinAssault;
+
+    public WarData(String team1Name, String team2Name, String reason) {
+        this.team1Name = team1Name;
+        this.team2Name = team2Name;
+        this.reason = reason;
+        this.status = WarStatus.REQUESTED;
+        this.totalAssaults = 1;
+        this.team1Points = 0;
+        this.team2Points = 0;
+        this.team1Manches = 0;
+        this.team2Manches = 0;
+        this.currentAssault = 0;
+        this.pointsToWinAssault = 25;
+    }
+
+    public String getTeam1Name() { return team1Name; }
+    public String getTeam2Name() { return team2Name; }
+    public String getReason() { return reason; }
+    public WarStatus getStatus() { return status; }
+    public void setStatus(WarStatus status) { this.status = status; }
+    public String getReward() { return reward; }
+    public void setReward(String reward) { this.reward = reward; }
+    public int getTotalAssaults() { return totalAssaults; }
+    public void setTotalAssaults(int totalAssaults) { this.totalAssaults = totalAssaults; }
+    public int getTeam1Points() { return team1Points; }
+    public void setTeam1Points(int team1Points) { this.team1Points = team1Points; }
+    public int getTeam2Points() { return team2Points; }
+    public void setTeam2Points(int team2Points) { this.team2Points = team2Points; }
+    public int getTeam1Manches() { return team1Manches; }
+    public void setTeam1Manches(int team1Manches) { this.team1Manches = team1Manches; }
+    public int getTeam2Manches() { return team2Manches; }
+    public void setTeam2Manches(int team2Manches) { this.team2Manches = team2Manches; }
+    public int getCurrentAssault() { return currentAssault; }
+    public void setCurrentAssault(int currentAssault) { this.currentAssault = currentAssault; }
+    public int getPointsToWinAssault() { return pointsToWinAssault; }
+    public void setPointsToWinAssault(int pointsToWinAssault) { this.pointsToWinAssault = pointsToWinAssault; }
+
+    public boolean isParticipant(String teamName) {
+        return team1Name.equalsIgnoreCase(teamName) || team2Name.equalsIgnoreCase(teamName);
+    }
+    
+    public String getOpponent(String teamName) {
+        if (team1Name.equalsIgnoreCase(teamName)) return team2Name;
+        if (team2Name.equalsIgnoreCase(teamName)) return team1Name;
+        return null;
+    }
+}

@@ -1,0 +1,31 @@
+package fr.timeo.lumidiscord.minecraft.team;
+
+import org.bukkit.Material;
+import java.util.HashMap;
+import java.util.Map;
+
+public class TeamQuest {
+    private Material material;
+    private int targetAmount;
+    private int currentAmount;
+    private String rewardDescription;
+    private String firstCompletedTeam;
+    private final Map<String, Integer> teamContributions = new HashMap<>();
+
+    public TeamQuest(Material material, int targetAmount, String rewardDescription) {
+        this.material = material;
+        this.targetAmount = targetAmount;
+        this.rewardDescription = rewardDescription;
+        this.currentAmount = 0;
+    }
+
+    public Material getMaterial() { return material; }
+    public int getTargetAmount() { return targetAmount; }
+    public int getCurrentAmount() { return currentAmount; }
+    public void setCurrentAmount(int currentAmount) { this.currentAmount = currentAmount; }
+    public String getRewardDescription() { return rewardDescription; }
+    public String getFirstCompletedTeam() { return firstCompletedTeam; }
+    public void setFirstCompletedTeam(String team) { this.firstCompletedTeam = team; }
+    public Map<String, Integer> getTeamContributions() { return teamContributions; }
+    public boolean isCompleted() { return currentAmount >= targetAmount; }
+}

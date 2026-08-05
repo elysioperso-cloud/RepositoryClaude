@@ -1,0 +1,42 @@
+package fr.timeo.lumidiscord.minecraft.team;
+
+import java.util.HashSet;
+import java.util.Set;
+
+public class TeamRole {
+    private int id;
+    private String name;
+    private int priority;
+    private final Set<TeamPermission> permissions;
+
+    public TeamRole(int id, String name, int priority) {
+        this.id = id;
+        this.name = name;
+        this.priority = priority;
+        this.permissions = new HashSet<>();
+    }
+
+    public int getId() { return id; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public int getPriority() { return priority; }
+    public void setPriority(int priority) { this.priority = priority; }
+    public Set<TeamPermission> getPermissions() { return permissions; }
+
+    public boolean hasPermission(TeamPermission permission) {
+        return permissions.contains(permission);
+    }
+
+    public void addPermission(TeamPermission permission) {
+        permissions.add(permission);
+    }
+
+    public void removePermission(TeamPermission permission) {
+        permissions.remove(permission);
+    }
+
+    public void togglePermission(TeamPermission permission) {
+        if (permissions.contains(permission)) permissions.remove(permission);
+        else permissions.add(permission);
+    }
+}

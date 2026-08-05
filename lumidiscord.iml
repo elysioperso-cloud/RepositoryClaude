@@ -1,0 +1,225 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="BackgroundAgentGlobalSettings">
+    <option name="selectedModelId" value="auto" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="9616442c-6902-482e-bdaf-b9ce12a91234" name="Changes" comment="" />
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="CopilotPersistence">
+    <persistenceIdMap>
+      <entry key="_C:/Users/cleme/OneDrive/Bureau/War Update" value="3GUQsLyStVNSsrwrUTqWfq5tVE0" />
+    </persistenceIdMap>
+  </component>
+  <component name="EmbeddingIndexingInfo">
+    <option name="cachedIndexableFilesCount" value="76" />
+  </component>
+  <component name="ExportToHTMLSettings">
+    <option name="OUTPUT_DIRECTORY" value="$PROJECT_DIR$/../War Update\exportToHTML" />
+  </component>
+  <component name="McpProjectServerCommands">
+    <commands />
+    <urls />
+  </component>
+  <component name="NextEditCompletionFeaturesState">
+    <decayedCancelled>
+      <entry key="MS100" value="1.0012395656455928" />
+      <entry key="MS500" value="1.695317602751064" />
+      <entry key="S2" value="4.872939154079651" />
+      <entry key="S5" value="6.914748630242074" />
+      <entry key="S10" value="7.873652531681015" />
+      <entry key="S30" value="9.195738072853084" />
+      <entry key="S60" value="10.520892778644455" />
+      <entry key="M2" value="11.832470797047664" />
+      <entry key="M5" value="12.998814149557766" />
+      <entry key="M10" value="13.486561800307827" />
+      <entry key="M15" value="13.722365048512003" />
+      <entry key="M30" value="14.334181062185529" />
+      <entry key="H1" value="15.824484436039231" />
+      <entry key="H2" value="20.057237083089046" />
+      <entry key="H4" value="29.486888303630725" />
+      <entry key="D1" value="59.887747117745675" />
+      <entry key="W1" value="70.88318279566352" />
+    </decayedCancelled>
+    <decayedSelected>
+      <entry key="MS100" value="0.0" />
+      <entry key="MS500" value="0.0" />
+      <entry key="S2" value="0.0" />
+      <entry key="S5" value="0.0" />
+      <entry key="S10" value="0.0" />
+      <entry key="S30" value="0.0" />
+      <entry key="S60" value="0.0" />
+      <entry key="M2" value="0.0" />
+      <entry key="M5" value="0.0" />
+      <entry key="M10" value="0.0" />
+      <entry key="M15" value="0.0" />
+      <entry key="M30" value="0.0" />
+      <entry key="H1" value="0.0" />
+      <entry key="H2" value="0.0" />
+      <entry key="H4" value="0.0" />
+      <entry key="D1" value="0.0" />
+      <entry key="W1" value="0.0" />
+    </decayedSelected>
+    <decayedShown>
+      <entry key="MS100" value="0.008560641871373348" />
+      <entry key="MS500" value="0.9843091645119587" />
+      <entry key="S2" value="4.563685758632343" />
+      <entry key="S5" value="6.771033742014072" />
+      <entry key="S10" value="7.797336121418081" />
+      <entry key="S30" value="9.159763239380947" />
+      <entry key="S60" value="10.493815783187893" />
+      <entry key="M2" value="11.814141287627827" />
+      <entry key="M5" value="12.989747478295683" />
+      <entry key="M10" value="13.481631526645767" />
+      <entry key="M15" value="13.71884965967376" />
+      <entry key="M30" value="14.331933379470037" />
+      <entry key="H1" value="15.822924303958818" />
+      <entry key="H2" value="20.056201396560624" />
+      <entry key="H4" value="29.486252827426515" />
+      <entry key="D1" value="59.8876126943309" />
+      <entry key="W1" value="70.88316257896318" />
+    </decayedShown>
+  </component>
+  <component name="ProblemsViewState">
+    <option name="selectedTabId" value="CurrentFile" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 2,
+  &quot;fromUser&quot;: false
+}</component>
+  <component name="ProjectId" id="3GUQsLyStVNSsrwrUTqWfq5tVE0" />
+  <component name="ProjectSessionTemplates">
+    <option name="panelTemplate">
+      <template>
+        <option name="modeId" value="Agent" />
+        <option name="model">
+          <model>
+            <option name="modelType" value="builtin_id" />
+            <option name="modelValue" value="auto" />
+          </model>
+        </option>
+        <option name="targetType" value="LOCAL" />
+      </template>
+    </option>
+  </component>
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Maven.Clean &amp; Packaxe WarUpadte.executor&quot;: &quot;Run&quot;,
+    &quot;Maven.lumidiscord [clean].executor&quot;: &quot;Run&quot;,
+    &quot;Maven.lumidiscord [package].executor&quot;: &quot;Run&quot;,
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.MCP Project settings loaded&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
+    &quot;codeWithMe.voiceChat.enabledByDefault&quot;: &quot;false&quot;,
+    &quot;com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1&quot;: &quot;true&quot;,
+    &quot;copilot.chat.legacySessionMetadata.migrated&quot;: &quot;true&quot;,
+    &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
+    &quot;junie.onboarding.icon.badge.shown&quot;: &quot;true&quot;,
+    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/Users/cleme/OneDrive/Bureau/War Update/src/main/java/fr/timeo/lumidiscord/minecraft/team&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;,
+    &quot;to.speed.mode.migration.done&quot;: &quot;true&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  }
+}</component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="C:\Users\cleme\OneDrive\Bureau\War Update\src\main\java\fr\timeo\lumidiscord\minecraft\team" />
+      <recent name="C:\Users\cleme\OneDrive\Bureau\War Update\src\main\java\fr\timeo\lumidiscord\minecraft\listeners" />
+    </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\Users\cleme\OneDrive\Bureau\War Update\src\main\resources" />
+    </key>
+    <key name="CopyClassDialog.RECENTS_KEY">
+      <recent name="fr.timeo.lumidiscord.minecraft.commands" />
+    </key>
+  </component>
+  <component name="RunManager">
+    <configuration name="Clean &amp; Packaxe WarUpadte" type="MavenRunConfiguration" factoryName="Maven">
+      <MavenSettings>
+        <option name="myGeneralSettings" />
+        <option name="myRunnerSettings" />
+        <option name="myRunnerParameters">
+          <MavenRunnerParameters>
+            <option name="cmdOptions" />
+            <option name="profiles">
+              <set />
+            </option>
+            <option name="goals">
+              <list>
+                <option value="clean" />
+                <option value="package" />
+              </list>
+            </option>
+            <option name="multimoduleDir" />
+            <option name="pomFileName" />
+            <option name="profilesMap">
+              <map />
+            </option>
+            <option name="projectsCmdOptionValues">
+              <list />
+            </option>
+            <option name="resolveToWorkspace" value="false" />
+            <option name="workingDirPath" value="$PROJECT_DIR$" />
+          </MavenRunnerParameters>
+        </option>
+      </MavenSettings>
+      <method v="2" />
+    </configuration>
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-jdk-30f59d01ecdd-37e91769500f-intellij.indexing.shared.core-IU-261.26222.65" />
+        <option value="bundled-js-predefined-d6986cc7102b-31caf2ab9e3c-JavaScript-IU-261.26222.65" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="9616442c-6902-482e-bdaf-b9ce12a91234" name="Changes" comment="" />
+      <created>1784023873441</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1784023873441</updated>
+      <workItem from="1784023874498" duration="17012000" />
+      <workItem from="1784052396553" duration="3037000" />
+      <workItem from="1784064653657" duration="1184000" />
+      <workItem from="1784112262941" duration="582000" />
+      <workItem from="1784114917115" duration="411000" />
+      <workItem from="1784116467324" duration="1671000" />
+      <workItem from="1784129062218" duration="16594000" />
+      <workItem from="1784206534977" duration="5335000" />
+      <workItem from="1784213990579" duration="1802000" />
+      <workItem from="1784225975894" duration="4000" />
+      <workItem from="1784229271390" duration="1275000" />
+      <workItem from="1784381144693" duration="14237000" />
+      <workItem from="1784474423882" duration="14961000" />
+      <workItem from="1784493887917" duration="1332000" />
+      <workItem from="1784495764842" duration="2551000" />
+      <workItem from="1784498402982" duration="10407000" />
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+</project>

@@ -1,0 +1,187 @@
+package fr.timeo.lumidiscord.minecraft.team;
+
+import fr.timeo.lumidiscord.LumiDiscord;
+import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
+import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.OfflinePlayer;
+import org.bukkit.World;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.scoreboard.Scoreboard;
+import org.bukkit.scoreboard.Team;
+import org.bukkit.util.io.BukkitObjectInputStream;
+import org.bukkit.util.io.BukkitObjectOutputStream;
+import org.yaml.snakeyaml.external.biz.base64Coder.Base64Coder;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.sql.*;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+public class TeamManager {
+    private final LumiDiscord plugin;
+    private final Map<String, TeamData> teamsByName = new ConcurrentHashMap<>();
+    private final Map<UUID, String> teamByPlayer = new ConcurrentHashMap<>();
+    private FileConfiguration teamConfig;
+    private File configFile;
+    private final Map<UUID, Long> lastMobKillXp = new HashMap<>();
+
+    public TeamManager(LumiDiscord plugin) {
+        this.plugin = plugin;
+        setupConfig();
+    }
+
+    private void setupConfig() {
+        configFile = new File(plugin.getDataFolder(), "configteam.yml");
+        if (!configFile.exists()) plugin.saveResource("configteam.yml", false);
+        teamConfig = YamlConfiguration.loadConfiguration(configFile);
+    }
+
+    public void initialize() {
+        try (Connection connection = plugin.getDatabaseService().getConnection()) {
+            createSchema(connection);
+            migrateSchema(connection);
+            loadFromDatabase(connection);
+        } catch (Exception e) {
+            plugin.getLogger().warning("MySQL Error: " + e.getMessage());
+        }
+    }
+
+    private void createSchema(Connection conn) throws SQLException {
+        try (Statement s = conn.createStatement()) {
+            s.execute("CREATE TABLE IF NOT EXISTS teams (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(64) NOT NULL, scoreboard_key VARCHAR(64) NOT NULL, leader_uuid CHAR(36) NOT NULL, color VARCHAR(32) NULL, prefix VARCHAR(32) NULL, xp BIGINT DEFAULT 0, level INT DEFAULT 1, chest_slots INT DEFAULT 1, home_world VARCHAR(64) NULL, home_x DOUBLE DEFAULT 0, home_y DOUBLE DEFAULT 0, home_z DOUBLE DEFAULT 0, home_yaw FLOAT DEFAULT 0, home_pitch FLOAT DEFAULT 0, banner_data TEXT NULL, created_at DATETIME NULL)");
+            s.execute("CREATE TABLE IF NOT EXISTS team_members (team_id INT NOT NULL, player_uuid CHAR(36) NOT NULL, role_id INT DEFAULT -1, PRIMARY KEY (team_id, player_uuid))");
+        }
+    }
+
+    private void migrateSchema(Connection conn) {
+        String[] cols = {"xp", "level", "chest_slots", "home_world", "home_x", "home_y", "home_z", "home_yaw", "home_pitch", "banner_data"};
+        for (String col : cols) {
+            try (Statement s = conn.createStatement()) { s.execute("ALTER TABLE teams ADD COLUMN IF NOT EXISTS " + col + " TEXT NULL"); } catch (SQLException ignored) {}
+        }
+    }
+
+    public void setHomeAndPersist(TeamData team, Location loc, Player sender) {
+        // 1. Mise à jour immédiate en mémoire (pour le système de War)
+        team.setHome(loc);
+        
+        // 2. Sauvegarde YAML (Secours)
+        String path = "teams." + team.getName();
+        teamConfig.set(path + ".home.world", loc.getWorld().getName());
+        teamConfig.set(path + ".home.x", loc.getX());
+        teamConfig.set(path + ".home.y", loc.getY());
+        teamConfig.set(path + ".home.z", loc.getZ());
+        try { teamConfig.save(configFile); } catch (IOException ignored) {}
+
+        // 3. Sauvegarde SQL avec retour d'erreur
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            try (Connection conn = plugin.getDatabaseService().getConnection()) {
+                PreparedStatement ps = conn.prepareStatement("UPDATE teams SET home_world=?, home_x=?, home_y=?, home_z=?, home_yaw=?, home_pitch=? WHERE name=?");
+                ps.setString(1, loc.getWorld().getName());
+                ps.setDouble(2, loc.getX());
+                ps.setDouble(3, loc.getY());
+                ps.setDouble(4, loc.getZ());
+                ps.setFloat(5, loc.getYaw());
+                ps.setFloat(6, loc.getPitch());
+                ps.setString(7, team.getName());
+                int rows = ps.executeUpdate();
+
+                if (rows > 0) {
+                    sender.sendMessage("§a§l✓ SUCCÈS ! §eLe home de la faction a été enregistré.");
+                    sender.sendMessage("§7Liaison avec le système de War : §aOPÉRATIONNELLE");
+                } else {
+                    sender.sendMessage("§c§l✗ ERREUR ! §7L'équipe n'a pas été trouvée dans la base de données.");
+                }
+            } catch (SQLException e) {
+                sender.sendMessage("§c§l✗ ERREUR CRITIQUE ! §7Impossible d'écrire dans la base de données.");
+                sender.sendMessage("§4Détail : §f" + e.getMessage());
+            }
+        });
+    }
+
+    public void persistTeam(TeamData team) {
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            try (Connection conn = plugin.getDatabaseService().getConnection()) {
+                PreparedStatement ps = conn.prepareStatement("UPDATE teams SET xp=?, level=?, leader_uuid=? WHERE name=?");
+                ps.setLong(1, team.getXp()); ps.setInt(2, team.getLevel()); ps.setString(3, team.getLeader().toString());
+                ps.setString(4, team.getName()); ps.executeUpdate();
+            } catch (Exception ignored) {}
+        });
+    }
+
+    public void loadFromDatabase(Connection conn) throws SQLException {
+        try (ResultSet rs = conn.prepareStatement("SELECT * FROM teams").executeQuery()) {
+            while (rs.next()) {
+                TeamData data = new TeamData(rs.getString("name"), rs.getString("scoreboard_key"), UUID.fromString(rs.getString("leader_uuid")), ChatColor.WHITE, "");
+                data.setDatabaseId(rs.getInt("id"));
+                data.setXp(rs.getLong("xp"));
+                data.setLevel(rs.getInt("level"));
+                
+                String worldName = rs.getString("home_world");
+                if (worldName != null && !worldName.isEmpty()) {
+                    World w = Bukkit.getWorld(worldName);
+                    if (w != null) data.setHome(new Location(w, rs.getDouble("home_x"), rs.getDouble("home_y"), rs.getDouble("home_z"), rs.getFloat("home_yaw"), rs.getFloat("home_pitch")));
+                }
+                
+                teamsByName.put(data.getName().toLowerCase(), data);
+                loadMembers(conn, data);
+            }
+        }
+    }
+
+    private void loadMembers(Connection conn, TeamData data) throws SQLException {
+        PreparedStatement ps = conn.prepareStatement("SELECT player_uuid FROM team_members WHERE team_id=?");
+        ps.setInt(1, data.getDatabaseId());
+        try (ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                UUID uid = UUID.fromString(rs.getString("player_uuid"));
+                data.addMember(uid);
+                teamByPlayer.put(uid, data.getName().toLowerCase());
+            }
+        }
+    }
+
+    public TeamData getTeamByName(String name) { return teamsByName.get(name.toLowerCase()); }
+    public TeamData getTeamByPlayer(UUID id) { String n = teamByPlayer.get(id); return n != null ? getTeamByName(n) : null; }
+    public Collection<TeamData> getAllTeams() { return teamsByName.values(); }
+    
+    public TeamData createTeam(String teamName, UUID leaderUuid, ChatColor color, String customPrefix) {
+        TeamData data = new TeamData(teamName, "t_"+System.currentTimeMillis(), leaderUuid, color, customPrefix);
+        teamsByName.put(teamName.toLowerCase(), data); teamByPlayer.put(leaderUuid, teamName.toLowerCase());
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            try (Connection conn = plugin.getDatabaseService().getConnection(); PreparedStatement ps = conn.prepareStatement("INSERT INTO teams (name, scoreboard_key, leader_uuid, color, prefix, created_at) VALUES (?,?,?,?,?,CURRENT_TIMESTAMP)", Statement.RETURN_GENERATED_KEYS)) {
+                ps.setString(1, data.getName()); ps.setString(2, data.getScoreboardKey()); ps.setString(3, leaderUuid.toString()); ps.setString(4, color.name()); ps.setString(5, customPrefix);
+                ps.executeUpdate();
+                try (ResultSet rs = ps.getGeneratedKeys()) { if (rs.next()) data.setDatabaseId(rs.getInt(1)); }
+            } catch (Exception ignored) {}
+        });
+        return data;
+    }
+
+    public void addPlayerToTeam(TeamData team, UUID uuid) {
+        team.addMember(uuid); teamByPlayer.put(uuid, team.getName().toLowerCase());
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            try (Connection conn = plugin.getDatabaseService().getConnection(); PreparedStatement ps = conn.prepareStatement("INSERT INTO team_members (team_id, player_uuid) VALUES (?,?)")) {
+                ps.setInt(1, team.getDatabaseId()); ps.setString(2, uuid.toString()); ps.executeUpdate();
+            } catch (Exception ignored) {}
+        });
+    }
+
+    public void removePlayerFromTeam(TeamData team, UUID uuid, boolean reset) { team.removeMember(uuid); teamByPlayer.remove(uuid); }
+    public void updateBanner(TeamData team, ItemStack banner) { team.setTeamBanner(banner); persistTeam(team); }
+    public String chatTag(TeamData team) { return ""; }
+    public void applyVisualsForMember(TeamData t, UUID m) {}
+    public void clearVisualForPlayer(TeamData t, UUID m) {}
+    public String visualPrefix(TeamData t) { return ""; }
+    public void updateColor(TeamData t, ChatColor c) {}
+    public void updatePrefix(TeamData t, String p) {}
+    public void transferLeadership(TeamData t, UUID id) {}
+}

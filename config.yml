@@ -1,0 +1,195 @@
+package fr.timeo.lumidiscord.minecraft.managers;
+
+import fr.timeo.lumidiscord.LumiDiscord;
+import fr.timeo.lumidiscord.models.XpBufferState;
+import fr.timeo.lumidiscord.models.XpSource;
+import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+public class XpBufferManager {
+
+    private final LumiDiscord plugin;
+    private final LevelManager levelManager;
+    private final RewardManager rewardManager;
+    private final Map<UUID, XpBufferState> bufferStates = new ConcurrentHashMap<>();
+    private final Set<UUID> loadedStates = ConcurrentHashMap.newKeySet();
+    private final Map<UUID, Long> lastFlush = new ConcurrentHashMap<>();
+    private final Map<UUID, Object> playerLocks = new ConcurrentHashMap<>();
+    private final Set<UUID> linkedPlayers = ConcurrentHashMap.newKeySet();
+    private final Map<UUID, Long> xpCache = new ConcurrentHashMap<>();
+
+    public XpBufferManager(LumiDiscord plugin, LevelManager levelManager, RewardManager rewardManager) {
+        this.plugin = plugin;
+        this.levelManager = levelManager;
+        this.rewardManager = rewardManager;
+    }
+
+    public long getCachedXp(UUID uuid) {
+        return xpCache.getOrDefault(uuid, 0L);
+    }
+
+    public void loadLinkedStatus(UUID uuid) {
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            try (Connection connection = plugin.getDatabaseService().getConnection();
+                 PreparedStatement stmt = connection.prepareStatement(
+                         "SELECT discord_id, xp FROM players WHERE uuid = ?")) {
+                stmt.setString(1, uuid.toString());
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                        String discordId = rs.getString("discord_id");
+                        if (discordId != null && !discordId.isEmpty()) linkedPlayers.add(uuid);
+                        xpCache.put(uuid, rs.getLong("xp"));
+                    }
+                }
+            } catch (SQLException e) {
+                plugin.getLogger().warning("Unable to check status for " + uuid + ": " + e.getMessage());
+            }
+        });
+    }
+
+    public void markAsLinked(UUID uuid) { linkedPlayers.add(uuid); }
+    public void markAsUnlinked(UUID uuid) { linkedPlayers.remove(uuid); xpCache.remove(uuid); }
+    public boolean isLinked(UUID uuid) { return linkedPlayers.contains(uuid); }
+
+    public void tickPlaytime() {
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (player == null || plugin.getAfkManager().isAfk(player)) continue;
+            UUID uuid = player.getUniqueId();
+            if (!linkedPlayers.contains(uuid)) continue;
+            XpBufferState state = getOrCreate(uuid);
+            int threshold = plugin.getConfig().getInt("xp.playtime-threshold-seconds", 600);
+            state.setPlaytimeSecondsXp(state.getPlaytimeSecondsXp() + 1);
+            if (state.getPlaytimeSecondsXp() >= threshold) {
+                state.setPlaytimeSecondsXp(0);
+                awardXpGain(uuid, plugin.getConfig().getInt("xp.playtime-xp-gain", 2), XpSource.PLAYTIME);
+            }
+        }
+    }
+
+    public void addDiscordMessage(UUID uuid) {
+        XpBufferState state = getOrCreate(uuid);
+        synchronized (state) {
+            state.setMessageCount(state.getMessageCount() + 1);
+            if (state.getMessageCount() >= plugin.getConfig().getInt("xp.discord-message-threshold", 10)) {
+                state.setMessageCount(0);
+                awardXpGain(uuid, plugin.getConfig().getInt("xp.discord-message-xp-gain", 1), XpSource.MESSAGES);
+            }
+        }
+    }
+
+    public void addDiscordVoice(UUID uuid) {
+        XpBufferState state = getOrCreate(uuid);
+        synchronized (state) {
+            state.setVoiceSeconds(state.getVoiceSeconds() + 1);
+            if (state.getVoiceSeconds() >= plugin.getConfig().getInt("xp.discord-voice-threshold-seconds", 600)) {
+                state.setVoiceSeconds(0);
+                awardXpGain(uuid, plugin.getConfig().getInt("xp.discord-voice-xp-gain", 3), XpSource.VOICE);
+            }
+        }
+    }
+
+    public XpBufferState getOrCreate(UUID uuid) {
+        XpBufferState state = bufferStates.computeIfAbsent(uuid, id -> new XpBufferState(id.toString()));
+        if (loadedStates.add(uuid)) loadState(uuid);
+        return state;
+    }
+
+    public void loadState(UUID uuid) {
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            try (Connection connection = plugin.getDatabaseService().getConnection();
+                 PreparedStatement statement = connection.prepareStatement("SELECT pending_xp FROM xp_buffer WHERE uuid = ?")) {
+                statement.setString(1, uuid.toString());
+                try (ResultSet resultSet = statement.executeQuery()) {
+                    if (resultSet.next()) {
+                        XpBufferState state = getOrCreate(uuid);
+                        synchronized (state) { state.setPendingXp(state.getPendingXp() + resultSet.getInt("pending_xp")); }
+                    }
+                }
+            } catch (SQLException ignored) {}
+        });
+    }
+
+    public void flushIfNeeded() {
+        long now = System.currentTimeMillis();
+        for (UUID uuid : new HashMap<>(bufferStates).keySet()) {
+            Long last = lastFlush.get(uuid);
+            if (last == null || now - last >= plugin.getConfig().getInt("xp.flush-interval-seconds", 30) * 1000L) {
+                flushOne(uuid, true);
+                lastFlush.put(uuid, now);
+            }
+        }
+    }
+
+    public void flushNow() {
+        for (UUID uuid : new HashMap<>(bufferStates).keySet()) flushOne(uuid, false);
+    }
+
+    private void flushOne(UUID uuid, boolean async) {
+        XpBufferState state = bufferStates.get(uuid);
+        if (state == null || state.getPendingXp() <= 0) return;
+        final int toFlush;
+        synchronized (state) { toFlush = state.getPendingXp(); state.setPendingXp(0); }
+        if (toFlush <= 0) return;
+        Runnable task = () -> {
+            try (Connection connection = plugin.getDatabaseService().getConnection()) {
+                try (PreparedStatement statement = connection.prepareStatement("INSERT INTO xp_buffer (uuid, pending_xp) VALUES (?, ?) ON DUPLICATE KEY UPDATE pending_xp = pending_xp + VALUES(pending_xp)")) {
+                    statement.setString(1, uuid.toString());
+                    statement.setInt(2, toFlush);
+                    statement.executeUpdate();
+                }
+            } catch (SQLException exception) {
+                synchronized (state) { state.setPendingXp(state.getPendingXp() + toFlush); }
+            }
+        };
+        if (async) Bukkit.getScheduler().runTaskAsynchronously(plugin, task); else task.run();
+    }
+
+    private void awardXpGain(UUID uuid, int baseAmount, XpSource source) {
+        if (baseAmount <= 0) return;
+        double multiplier = plugin.getStreakManager().getXpMultiplier(uuid);
+        int amount = (int) Math.round(baseAmount * multiplier);
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            Object lock = playerLocks.computeIfAbsent(uuid, id -> new Object());
+            synchronized (lock) {
+                try (Connection connection = plugin.getDatabaseService().getConnection()) {
+                    connection.setAutoCommit(false);
+                    try (PreparedStatement updatePlayers = connection.prepareStatement("UPDATE players SET xp = xp + ? WHERE uuid = ?")) {
+                        updatePlayers.setInt(1, amount);
+                        updatePlayers.setString(2, uuid.toString());
+                        updatePlayers.executeUpdate();
+                    }
+                    if (source != null) {
+                        try (PreparedStatement srcStmt = connection.prepareStatement("INSERT INTO xp_sources (uuid, " + source.getColumn() + ") VALUES (?, ?) ON DUPLICATE KEY UPDATE " + source.getColumn() + " = " + source.getColumn() + " + VALUES(" + source.getColumn() + ")")) {
+                            srcStmt.setString(1, uuid.toString()); srcStmt.setInt(2, amount); srcStmt.executeUpdate();
+                        }
+                    }
+                    long newXp = 0;
+                    try (PreparedStatement ps = connection.prepareStatement("SELECT xp FROM players WHERE uuid = ?")) {
+                        ps.setString(1, uuid.toString());
+                        try (ResultSet rs = ps.executeQuery()) { if (rs.next()) newXp = rs.getLong("xp"); }
+                    }
+                    xpCache.put(uuid, newXp);
+                    rewardManager.checkAndGrantForLevel(uuid, levelManager.calculateLevel(newXp - amount), levelManager.calculateLevel(newXp));
+                    connection.commit();
+                    final int finalAmount = amount;
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        Player p = Bukkit.getPlayer(uuid);
+                        if (p != null) p.sendActionBar("§a+" + finalAmount + " XP");
+                    });
+                } catch (SQLException ignored) {}
+            }
+        });
+    }
+
+    public void awardXpGainAdmin(UUID uuid, int amount) { awardXpGain(uuid, amount, XpSource.ADMIN); }
+}

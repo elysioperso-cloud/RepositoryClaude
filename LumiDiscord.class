@@ -1,0 +1,78 @@
+package fr.timeo.lumidiscord.minecraft.war;
+
+import fr.timeo.lumidiscord.minecraft.team.TeamData;
+import fr.timeo.lumidiscord.minecraft.team.TeamManager;
+import org.bukkit.ChatColor;
+import org.bukkit.entity.ArmorStand;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryType;
+import org.bukkit.event.player.PlayerCommandPreprocessEvent;
+import org.bukkit.event.player.PlayerMoveEvent;
+
+public class WarListener implements Listener {
+    private final WarManager warManager;
+    private final TeamManager teamManager;
+
+    public WarListener(WarManager warManager, TeamManager teamManager) {
+        this.warManager = warManager;
+        this.teamManager = teamManager;
+    }
+
+    @EventHandler
+    public void onCommand(PlayerCommandPreprocessEvent event) {
+        Player player = event.getPlayer();
+        if (player.hasPermission("lumidiscord.admin")) return;
+
+        String fullMsg = event.getMessage();
+        String cmd = fullMsg.split(" ")[0];
+        
+        if (warManager.isCommandDisabled(player, cmd)) {
+            event.setCancelled(true);
+            String msg = warManager.getMessage("command-blocked")
+                    .replace("%player%", player.getName())
+                    .replace("%command%", cmd);
+            org.bukkit.Bukkit.broadcastMessage(msg);
+        }
+    }
+
+    @EventHandler
+    public void onFlagInteract(EntityDamageByEntityEvent event) {
+        if (event.getDamager() instanceof Player player && event.getEntity() instanceof ArmorStand as) {
+            if (as.getScoreboardTags().contains("war_flag")) {
+                event.setCancelled(true);
+                warManager.handleFlagPickup(player, as);
+            }
+        }
+    }
+
+    @EventHandler
+    public void onMove(PlayerMoveEvent event) {
+        if (event.getTo() != null && (event.getFrom().getBlockX() != event.getTo().getBlockX() || event.getFrom().getBlockZ() != event.getTo().getBlockZ())) {
+            warManager.checkFlagCapture(event.getPlayer());
+        }
+    }
+
+    @EventHandler
+    public void onInventoryClick(InventoryClickEvent event) {
+        if (event.getSlotType() == InventoryType.SlotType.ARMOR && event.getSlot() == 39) {
+            if (warManager.isFlagHolder(event.getWhoClicked().getUniqueId())) {
+                event.setCancelled(true);
+                event.getWhoClicked().sendMessage(ChatColor.RED + "Vous ne pouvez pas retirer le drapeau !");
+            }
+        }
+    }
+
+    @EventHandler
+    public void onKill(PlayerDeathEvent event) {
+        Player victim = event.getEntity();
+        Player killer = victim.getKiller();
+        if (killer == null) return;
+
+        warManager.addKillPoint(killer, victim);
+    }
+}

@@ -1,0 +1,62 @@
+database:
+  host: ""
+  port: 3306
+  database: ""
+  user: ""
+  password: ""
+
+discord:
+  token: "MTUxOTYxNzA1NDc5MjIyMDcyMg.GOGANC.mraKwrkDZg6yikXkcZfk28JPlTbwB-raV_Rgy33" #changer le 33 par 4
+  guild-id: "1510688486238457857"
+  allowed-text-channels: []
+  message-spam-cooldown-seconds: 5
+  online-players-status: false #met ca en true kikou
+  level-up-channel: "xp"
+  daily-xp-amount: 25
+
+xp:
+  base-level-xp: 200
+  progression-multiplier: 1.1
+  playtime-threshold-seconds: 600
+  playtime-xp-gain: 2
+  discord-message-threshold: 10
+  discord-message-xp-gain: 1
+  discord-voice-threshold-seconds: 600
+  discord-voice-xp-gain: 3
+  flush-interval-seconds: 30
+  link-code-expiration-minutes: 10
+
+afk:
+  detection-threshold-seconds: 300
+
+http:
+  enabled: true
+  port: 60325
+  cors-origin: "https://example.github.io"
+
+home:
+  required-level: 20
+  spawn-required-level: 1
+
+rewards:
+  "1":
+    name: "Accès au /spawn"
+    command: "SPAWN"
+  "5":
+    name: "Épée en diamant Looting V"
+    command: "give %player% diamond_sword[enchantments={sharpness:5,looting:5}] 1"
+  "10":
+    name: "Tête du joueur"
+    command: "give %player% player_head[profile={name:\"%player%\"}] 1"
+  "15":
+    name: "Pioche en diamant Efficacité VII"
+    command: "give %player% diamond_pickaxe[enchantments={efficiency:7}] 1"
+  "20":
+    name: "Accès au /home et /sethome"
+    command: "HOME"
+
+roles:
+  "1": "ID_ROLE_NIVEAU_1"
+  "5": "ID_ROLE_NIVEAU_5"
+  "10": "ID_ROLE_NIVEAU_10"
+  "15": "ID_ROLE_NIVEAU_15"

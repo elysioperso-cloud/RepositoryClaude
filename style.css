@@ -1,0 +1,93 @@
+package fr.timeo.lumidiscord.minecraft.team;
+
+import org.bukkit.ChatColor;
+import org.bukkit.Location;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
+
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+public class TeamData {
+    private final String name;
+    private final String scoreboardKey;
+    private volatile UUID leader;
+    private final Set<UUID> members;
+    private final Set<String> pendingMembers;
+    private volatile ChatColor color;
+    private volatile String customPrefix;
+    private volatile Location home;
+    private volatile Integer databaseId;
+    private volatile ItemStack teamBanner;
+    private volatile long xp;
+    private volatile int level;
+
+    // Grades & Chest
+    private final Map<Integer, TeamRole> roles = new ConcurrentHashMap<>();
+    private final Map<UUID, Integer> playerRoleIds = new ConcurrentHashMap<>();
+    private volatile int chestSlots = 1;
+    private final Map<Integer, ItemStack> chestItems = new ConcurrentHashMap<>();
+    private volatile TeamQuest activeQuest;
+
+    public TeamData(String name, String scoreboardKey, UUID leader, ChatColor color, String customPrefix) {
+        this.name = name;
+        this.scoreboardKey = scoreboardKey;
+        this.leader = leader;
+        this.color = color;
+        this.customPrefix = customPrefix;
+        this.members = ConcurrentHashMap.newKeySet();
+        this.pendingMembers = ConcurrentHashMap.newKeySet();
+        this.members.add(leader);
+        this.xp = 0;
+        this.level = 1;
+    }
+
+    public Integer getDatabaseId() { return databaseId; }
+    public void setDatabaseId(Integer databaseId) { this.databaseId = databaseId; }
+    public String getName() { return name; }
+    public String getScoreboardKey() { return scoreboardKey; }
+    public UUID getLeader() { return leader; }
+    public void setLeader(UUID leader) { this.leader = leader; this.members.add(leader); }
+    public Set<UUID> getMembers() { return Collections.unmodifiableSet(members); }
+    public boolean addMember(UUID uuid) { return members.add(uuid); }
+    public boolean removeMember(UUID uuid) { return members.remove(uuid); }
+    public Set<String> getPendingMembers() { return Collections.unmodifiableSet(pendingMembers); }
+    public boolean addPendingMember(String name) { if (name == null || name.isBlank()) return false; return pendingMembers.add(name.toLowerCase(Locale.ROOT)); }
+    public boolean removePendingMember(String name) { if (name == null || name.isBlank()) return false; return pendingMembers.remove(name.toLowerCase(Locale.ROOT)); }
+    public ChatColor getColor() { return color; }
+    public void setColor(ChatColor color) { this.color = color; }
+    public String getCustomPrefix() { return customPrefix; }
+    public void setCustomPrefix(String customPrefix) { this.customPrefix = customPrefix; }
+    public Location getHome() { return home == null ? null : home.clone(); }
+    public boolean hasHome() { return home != null; }
+    public void setHome(Location home) { this.home = home == null ? null : home.clone(); }
+    public void clearHome() { this.home = null; }
+    public ItemStack getTeamBanner() { return teamBanner != null ? teamBanner.clone() : null; }
+    public void setTeamBanner(ItemStack teamBanner) { this.teamBanner = teamBanner != null ? teamBanner.clone() : null; }
+    public long getXp() { return xp; }
+    public void setXp(long xp) { this.xp = xp; }
+    public int getLevel() { return level; }
+    public void setLevel(int level) { this.level = level; }
+
+    public boolean hasPermission(UUID playerUuid, TeamPermission permission) {
+        if (playerUuid.equals(leader)) return true; // Owner a tout
+        TeamRole role = getPlayerRole(playerUuid);
+        return role != null && role.hasPermission(permission);
+    }
+
+    public TeamRole getPlayerRole(UUID playerUuid) {
+        Integer roleId = playerRoleIds.get(playerUuid);
+        return roleId != null ? roles.get(roleId) : null;
+    }
+
+    public void setPlayerRole(UUID playerUuid, int roleId) { playerRoleIds.put(playerUuid, roleId); }
+    public Map<Integer, TeamRole> getRoles() { return roles; }
+    public void addRole(TeamRole role) { roles.put(role.getId(), role); }
+    public void removeRole(int id) { roles.remove(id); }
+
+    public int getChestSlots() { return chestSlots; }
+    public void setChestSlots(int chestSlots) { this.chestSlots = chestSlots; }
+    public Map<Integer, ItemStack> getChestItems() { return chestItems; }
+    public TeamQuest getActiveQuest() { return activeQuest; }
+    public void setActiveQuest(TeamQuest activeQuest) { this.activeQuest = activeQuest; }
+}

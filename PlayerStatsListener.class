@@ -1,0 +1,438 @@
+package fr.timeo.lumidiscord.minecraft.war;
+
+import fr.timeo.lumidiscord.LumiDiscord;
+import fr.timeo.lumidiscord.minecraft.team.TeamData;
+import fr.timeo.lumidiscord.minecraft.team.TeamManager;
+import org.bukkit.*;
+import org.bukkit.boss.BarColor;
+import org.bukkit.boss.BarStyle;
+import org.bukkit.boss.BossBar;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.entity.ArmorStand;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Firework;
+import org.bukkit.entity.Player;
+import org.bukkit.entity.Warden;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.FireworkMeta;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
+import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
+
+import java.io.File;
+import java.sql.*;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+public class WarManager {
+    private final LumiDiscord plugin;
+    private final TeamManager teamManager;
+    private FileConfiguration warConfig;
+    private final Map<String, WarData> activeWars = new ConcurrentHashMap<>();
+    private final Map<String, List<Location>> flagLocations = new ConcurrentHashMap<>();
+    private final Map<UUID, String> flagHolders = new ConcurrentHashMap<>();
+    private final Map<UUID, ItemStack> playerHelmets = new ConcurrentHashMap<>();
+    private final Set<UUID> playersHidingBossBar = ConcurrentHashMap.newKeySet();
+
+    private BossBar countdownBar;
+    private boolean assaultReady = false;
+    private BukkitTask currentCountdownTask;
+
+    public WarManager(LumiDiscord plugin, TeamManager teamManager) {
+        this.plugin = plugin;
+        this.teamManager = teamManager;
+        loadConfig();
+        loadWarData();
+    }
+
+    public void loadConfig() {
+        File file = new File(plugin.getDataFolder(), "configwar.yml");
+        if (!file.exists()) plugin.saveResource("configwar.yml", false);
+        warConfig = YamlConfiguration.loadConfiguration(file);
+    }
+
+    public FileConfiguration getWarConfig() { return warConfig; }
+
+    public String getMessage(String path) {
+        return ChatColor.translateAlternateColorCodes('&', warConfig.getString("messages." + path, ""));
+    }
+
+    private String getWarKey(String t1, String t2) {
+        return t1.compareToIgnoreCase(t2) < 0 ? t1.toLowerCase() + ":" + t2.toLowerCase() : t2.toLowerCase() + ":" + t1.toLowerCase();
+    }
+
+    public boolean declareWar(String team1, String team2, String reason, Player sender) {
+        if (team1.equalsIgnoreCase(team2)) { sender.sendMessage(ChatColor.RED + "Vous ne pouvez pas déclarer la guerre à votre propre équipe !"); return false; }
+        WarData war = new WarData(team1, team2, reason);
+        war.setPointsToWinAssault(warConfig.getInt("war.points-to-win-assault", 25));
+        activeWars.put(getWarKey(team1, team2), war);
+        saveWarData(war);
+        Bukkit.broadcast(getMessage("war-declared").replace("%team1%", team1).replace("%team2%", team2).replace("%reason%", reason), "lumidiscord.admin");
+        return true;
+    }
+
+    public boolean canAcceptWar(String t1, String t2, Player admin) {
+        TeamData team1 = teamManager.getTeamByName(t1);
+        TeamData team2 = teamManager.getTeamByName(t2);
+        
+        if (team1 == null || team2 == null) {
+            admin.sendMessage(ChatColor.RED + "Une des équipes spécifiées n'existe plus.");
+            return false;
+        }
+
+        if (!team1.hasHome()) {
+            admin.sendMessage(ChatColor.RED + "L'équipe " + t1 + " n'a pas de home ! Elle doit faire /team sethome.");
+            return false;
+        }
+
+        if (!team2.hasHome()) {
+            admin.sendMessage(ChatColor.RED + "L'équipe " + t2 + " n'a pas de home ! Elle doit faire /team sethome.");
+            return false;
+        }
+
+        if (!flagLocations.containsKey(t1.toLowerCase())) {
+            admin.sendMessage(ChatColor.RED + "La bannière de " + t1 + " n'est pas posée ! Faites /war set [nom] " + t1);
+            return false;
+        }
+
+        if (!flagLocations.containsKey(t2.toLowerCase())) {
+            admin.sendMessage(ChatColor.RED + "La bannière de " + t2 + " n'est pas posée ! Faites /war set [nom] " + t2);
+            return false;
+        }
+
+        return true;
+    }
+
+    public void acceptWar(WarData war, String reward, boolean derogation) {
+        war.setReward(reward);
+        war.setStatus(WarStatus.ACCEPTED);
+        saveWarData(war);
+        
+        Bukkit.broadcastMessage(getMessage("war-accepted").replace("%team1%", war.getTeam1Name()).replace("%team2%", war.getTeam2Name()).replace("%time%", String.valueOf(warConfig.getInt("war.countdown-minutes"))));
+        Bukkit.broadcastMessage(getMessage("war-reward").replace("%reward%", reward));
+        Bukkit.broadcastMessage(getMessage("rules-reminder"));
+
+        Bukkit.getOnlinePlayers().forEach(p -> {
+            p.playSound(p.getLocation(), Sound.BLOCK_END_PORTAL_SPAWN, 1f, 1f);
+            spawnFirework(p.getLocation(), 1);
+        });
+
+        if (derogation) startCountdown(war);
+        else checkAndStartCountdown(war);
+    }
+
+    private void checkAndStartCountdown(WarData war) {
+        if (countdownBar != null) countdownBar.removeAll();
+        countdownBar = null;
+
+        currentCountdownTask = new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (war.getStatus() != WarStatus.ACCEPTED) { this.cancel(); return; }
+                int p1 = getOnlineCount(war.getTeam1Name());
+                int p2 = getOnlineCount(war.getTeam2Name());
+                int min = warConfig.getInt("war.min-players-per-team");
+
+                if (p1 >= min && p2 >= min) {
+                    startCountdown(war);
+                    this.cancel();
+                } else {
+                    if (countdownBar == null) {
+                        countdownBar = Bukkit.createBossBar(getMessage("waiting-for-players"), BarColor.BLUE, BarStyle.SOLID);
+                        Bukkit.getOnlinePlayers().stream().filter(p -> !playersHidingBossBar.contains(p.getUniqueId())).forEach(countdownBar::addPlayer);
+                    }
+                    countdownBar.setTitle(getMessage("waiting-for-players").replace("%min_players%", String.valueOf(min)));
+                }
+            }
+        }.runTaskTimer(plugin, 0L, 200L); // Vérification toutes les 10 secondes
+    }
+
+    private void startCountdown(WarData war) {
+        if (currentCountdownTask != null) currentCountdownTask.cancel();
+        int seconds = warConfig.getInt("war.countdown-minutes") * 60;
+        
+        if (countdownBar == null) {
+            countdownBar = Bukkit.createBossBar(getMessage("countdown-bossbar").replace("%time%", seconds/60 + ":00"), BarColor.RED, BarStyle.SOLID);
+            Bukkit.getOnlinePlayers().stream().filter(p -> !playersHidingBossBar.contains(p.getUniqueId())).forEach(countdownBar::addPlayer);
+        } else {
+            countdownBar.setColor(BarColor.RED);
+            countdownBar.setVisible(true);
+        }
+
+        currentCountdownTask = new BukkitRunnable() {
+            int remaining = seconds;
+            @Override
+            public void run() {
+                if (remaining <= 0) {
+                    countdownBar.setTitle(getMessage("assault-ready"));
+                    countdownBar.setProgress(1.0);
+                    assaultReady = true;
+                    this.cancel();
+                    return;
+                }
+                countdownBar.setTitle(getMessage("countdown-bossbar").replace("%time%", String.format("%02d:%02d", remaining/60, remaining%60)));
+                countdownBar.setProgress((double) remaining / seconds);
+                remaining--;
+            }
+        }.runTaskTimer(plugin, 0L, 20L);
+    }
+
+    public void triggerAssault(Player player) {
+        TeamData team = teamManager.getTeamByPlayer(player.getUniqueId());
+        if (team == null || !assaultReady) return;
+        for (WarData war : activeWars.values()) {
+            if (war.isParticipant(team.getName()) && war.getStatus() == WarStatus.ACCEPTED) {
+                if (currentCountdownTask != null) currentCountdownTask.cancel();
+                if (countdownBar != null) countdownBar.removeAll();
+                war.setStatus(WarStatus.ONGOING);
+                saveWarData(war);
+                startAssault(war);
+                assaultReady = false;
+                return;
+            }
+        }
+    }
+
+    public void startAssault(WarData war) {
+        Bukkit.broadcastMessage(getMessage("assault-started"));
+        playSoundToTeams(war, Sound.ENTITY_ENDER_DRAGON_GROWL, 1f, 1f);
+        teleportTeamsToHome(war);
+        spawnFlags(war);
+    }
+
+    private void teleportTeam(String teamName) {
+        TeamData team = teamManager.getTeamByName(teamName);
+        if (team != null && team.hasHome()) {
+            Location home = team.getHome();
+            team.getMembers().forEach(uuid -> { Player p = Bukkit.getPlayer(uuid); if (p != null) p.teleport(home); });
+        }
+    }
+
+    private void teleportTeamsToHome(WarData war) { teleportTeam(war.getTeam1Name()); teleportTeam(war.getTeam2Name()); }
+
+    private void spawnFlags(WarData war) {
+        spawnFlagsForTeam(war.getTeam1Name(), DyeColor.BLUE);
+        spawnFlagsForTeam(war.getTeam2Name(), DyeColor.RED);
+    }
+
+    private void spawnFlagsForTeam(String teamName, DyeColor color) {
+        List<Location> locs = flagLocations.get(teamName.toLowerCase());
+        if (locs == null) return;
+        TeamData team = teamManager.getTeamByName(teamName);
+        if (team == null) return;
+        for (Location loc : locs) {
+            ArmorStand as = loc.getWorld().spawn(loc, ArmorStand.class);
+            as.setGravity(false); as.setCustomName(ChatColor.GOLD + "Bannière " + teamName); as.setCustomNameVisible(true); as.setGlowing(true);
+            ItemStack banner = team.getTeamBanner();
+            if (banner == null) banner = new ItemStack(Material.valueOf(color.name() + "_BANNER"));
+            as.getEquipment().setHelmet(banner);
+            as.addScoreboardTag("war_flag"); as.addScoreboardTag("team_" + teamName.toLowerCase());
+        }
+    }
+
+    public void handleFlagPickup(Player player, ArmorStand as) {
+        String flagTeam = as.getScoreboardTags().stream().filter(t -> t.startsWith("team_")).findFirst().map(t -> t.substring(5)).orElse(null);
+        TeamData pt = teamManager.getTeamByPlayer(player.getUniqueId());
+        if (pt == null || flagTeam == null || pt.getName().equalsIgnoreCase(flagTeam)) return;
+        as.remove(); flagHolders.put(player.getUniqueId(), flagTeam);
+        ItemStack h = player.getEquipment().getHelmet();
+        if (h != null) playerHelmets.put(player.getUniqueId(), h);
+        player.getEquipment().setHelmet(as.getEquipment().getHelmet());
+        Bukkit.broadcastMessage(getMessage("flag-taken").replace("%player%", player.getName()).replace("%team%", flagTeam));
+        applyFlagEffects(player);
+    }
+
+    private void applyFlagEffects(Player player) {
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (!flagHolders.containsKey(player.getUniqueId()) || !player.isOnline()) { 
+                    clearPlayerFlagEffects(player);
+                    this.cancel(); 
+                    return; 
+                }
+                player.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, 40, 0));
+                player.addPotionEffect(new PotionEffect(PotionEffectType.WEAKNESS, 40, 0));
+                player.addPotionEffect(new PotionEffect(PotionEffectType.GLOWING, 40, 0));
+            }
+        }.runTaskTimer(plugin, 0L, 20L);
+    }
+
+    private void clearPlayerFlagEffects(Player player) {
+        if (player == null) return;
+        player.removePotionEffect(PotionEffectType.SLOWNESS);
+        player.removePotionEffect(PotionEffectType.WEAKNESS);
+        player.removePotionEffect(PotionEffectType.GLOWING);
+    }
+
+    public void handlePlayerDeath(Player player) {
+        if (flagHolders.containsKey(player.getUniqueId())) {
+            String flagTeam = flagHolders.remove(player.getUniqueId());
+            player.getEquipment().setHelmet(playerHelmets.remove(player.getUniqueId()));
+            clearPlayerFlagEffects(player);
+            Bukkit.broadcastMessage(ChatColor.RED + "Le porteur d'une bannière de " + flagTeam + " est mort ! La bannière est perdue pour cette manche.");
+        }
+    }
+
+    public boolean isFlagHolder(UUID uuid) { return flagHolders.containsKey(uuid); }
+
+    public void checkFlagCapture(Player player) {
+        if (!flagHolders.containsKey(player.getUniqueId())) return;
+        TeamData team = teamManager.getTeamByPlayer(player.getUniqueId());
+        if (team == null || !team.hasHome() || player.getLocation().distance(team.getHome()) >= 5) return;
+        String captured = flagHolders.remove(player.getUniqueId());
+        player.getEquipment().setHelmet(playerHelmets.remove(player.getUniqueId()));
+        clearPlayerFlagEffects(player);
+        WarData war = getWar(team.getName(), captured);
+        if (war != null) {
+            int pts = warConfig.getInt("war.points.flag-capture", 10);
+            if (war.getTeam1Name().equalsIgnoreCase(team.getName())) war.setTeam1Points(war.getTeam1Points() + pts);
+            else war.setTeam2Points(war.getTeam2Points() + pts);
+            saveWarData(war);
+            Bukkit.broadcastMessage(getMessage("point-gain-flag").replace("%player%", player.getName()).replace("%team%", team.getName()).replace("%points%", String.valueOf(pts)));
+            checkScore(war);
+        }
+    }
+
+    public void addKillPoint(Player killer, Player victim) {
+        TeamData killerTeam = teamManager.getTeamByPlayer(killer.getUniqueId()), victimTeam = teamManager.getTeamByPlayer(victim.getUniqueId());
+        if (killerTeam == null || victimTeam == null) return;
+        WarData war = getWar(killerTeam.getName(), victimTeam.getName());
+        if (war != null && war.getStatus() == WarStatus.ONGOING) {
+            int pts = warConfig.getInt("war.points.kill", 3);
+            if (war.getTeam1Name().equalsIgnoreCase(killerTeam.getName())) war.setTeam1Points(war.getTeam1Points() + pts);
+            else war.setTeam2Points(war.getTeam2Points() + pts);
+            saveWarData(war);
+            Bukkit.broadcastMessage(getMessage("point-gain-kill").replace("%killer%", killer.getName()).replace("%victim%", victim.getName()).replace("%team%", killerTeam.getName()).replace("%points%", String.valueOf(pts)));
+            checkScore(war);
+        }
+    }
+
+    private void checkScore(WarData war) {
+        if (war.getTeam1Points() >= war.getPointsToWinAssault() || war.getTeam2Points() >= war.getPointsToWinAssault()) {
+            String winManche = war.getTeam1Points() >= war.getPointsToWinAssault() ? war.getTeam1Name() : war.getTeam2Name();
+            if (winManche.equalsIgnoreCase(war.getTeam1Name())) war.setTeam1Manches(war.getTeam1Manches() + 1);
+            else war.setTeam2Manches(war.getTeam2Manches() + 1);
+            war.setCurrentAssault(war.getCurrentAssault() + 1);
+            clearAllFlags();
+            if (war.getCurrentAssault() >= war.getTotalAssaults()) {
+                if (war.getTeam1Manches() == war.getTeam2Manches()) {
+                    Bukkit.broadcastMessage(getMessage("tie-breaker"));
+                    war.setTotalAssaults(war.getTotalAssaults() + 1);
+                    nextManche(war, winManche);
+                } else { endWar(war); }
+            } else { nextManche(war, winManche); }
+        }
+    }
+
+    public void checkInstantScore(WarData war) { checkScore(war); } // Méthode de support pour WarCommand
+
+    private void nextManche(WarData war, String winner) {
+        Bukkit.broadcastMessage(getMessage("manche-victory").replace("%team%", winner));
+        TeamData t = teamManager.getTeamByName(winner);
+        if (t != null) t.getMembers().forEach(u -> { Player p = Bukkit.getPlayer(u); if (p != null) for(int i=0; i<3; i++) spawnFirework(p.getLocation(), 1); });
+        war.setTeam1Points(0); war.setTeam2Points(0); saveWarData(war);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> startAssault(war), 200L);
+    }
+
+    private void endWar(WarData war) {
+        war.setStatus(WarStatus.FINISHED); saveWarData(war);
+        String winner = war.getTeam1Manches() > war.getTeam2Manches() ? war.getTeam1Name() : war.getTeam2Name();
+        broadcastVictory(winner, war.getOpponent(winner), war.getReward());
+        removeFlagLocation(war.getTeam1Name()); removeFlagLocation(war.getTeam2Name());
+        activeWars.remove(getWarKey(war.getTeam1Name(), war.getTeam2Name())); deleteWarData(war);
+        if (countdownBar != null) countdownBar.removeAll();
+        clearAllFlags();
+    }
+
+    public void forceEndWarNoWinner(WarData war) {
+        war.setStatus(WarStatus.FINISHED);
+        removeFlagLocation(war.getTeam1Name()); removeFlagLocation(war.getTeam2Name());
+        activeWars.remove(getWarKey(war.getTeam1Name(), war.getTeam2Name())); deleteWarData(war);
+        if (countdownBar != null) countdownBar.removeAll();
+        clearAllFlags();
+        Bukkit.broadcastMessage(ChatColor.YELLOW + "La guerre a été annulée par un administrateur.");
+    }
+
+    private void clearAllFlags() {
+        flagHolders.keySet().forEach(uuid -> {
+            Player p = Bukkit.getPlayer(uuid);
+            if (p != null) { p.getEquipment().setHelmet(playerHelmets.remove(uuid)); clearPlayerFlagEffects(p); }
+        });
+        flagHolders.clear();
+        Bukkit.getWorlds().forEach(w -> w.getEntitiesByClass(ArmorStand.class).stream().filter(as -> as.getScoreboardTags().contains("war_flag")).forEach(org.bukkit.entity.Entity::remove));
+    }
+
+    private void broadcastVictory(String winner, String loser, String reward) {
+        String bar = "§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+        Bukkit.broadcastMessage(bar); Bukkit.broadcastMessage("");
+        Bukkit.broadcastMessage("       §6§lVICTOIRE DE L'ÉQUIPE §e§l" + winner.toUpperCase());
+        Bukkit.broadcastMessage(""); Bukkit.broadcastMessage("       §aRécompense : §f" + reward);
+        Bukkit.broadcastMessage(""); Bukkit.broadcastMessage(bar);
+        TeamData winT = teamManager.getTeamByName(winner), loseT = teamManager.getTeamByName(loser);
+        if (winT != null) winT.getMembers().stream().map(Bukkit::getPlayer).filter(Objects::nonNull).forEach(p -> { p.sendTitle("§6§lVICTOIRE !", "§aVous avez remporté la guerre", 10, 70, 20); startVictoryTasks(p); });
+        if (loseT != null) loseT.getMembers().stream().map(Bukkit::getPlayer).filter(Objects::nonNull).forEach(p -> { p.sendTitle("§c§lDÉFAITE", "§7Vous avez perdu le conflit", 10, 70, 20); p.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, 60, 255)); p.playSound(p.getLocation(), Sound.ENTITY_WARDEN_EMERGE, 1f, 0.5f); spawnWardens(p); });
+    }
+
+    private void startVictoryTasks(Player p) {
+        new BukkitRunnable() {
+            int ticks = 0;
+            @Override
+            public void run() {
+                if (ticks >= 15 * 2) { this.cancel(); return; }
+                Random r = new Random();
+                for (int i = 0; i < 3; i++) spawnFirework(p.getLocation().clone().add(r.nextDouble()*6-3, r.nextDouble()*2, r.nextDouble()*6-3), 2);
+                p.getWorld().spawnParticle(Particle.TOTEM_OF_UNDYING, p.getLocation(), 20, 1, 0, 1, 0.1);
+                ticks++;
+            }
+        }.runTaskTimer(plugin, 0L, 10L);
+    }
+
+    private void spawnWardens(Player p) {
+        List<Warden> ws = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            Warden w = (Warden) p.getWorld().spawnEntity(p.getLocation().clone().add(Math.random()*4-2, 0, Math.random()*4-2), EntityType.WARDEN);
+            w.setAI(false); w.setInvulnerable(true); ws.add(w);
+        }
+        Bukkit.getScheduler().runTaskLater(plugin, () -> ws.forEach(org.bukkit.entity.Entity::remove), 60L);
+    }
+
+    private void spawnFirework(Location l, int p) {
+        Firework fw = l.getWorld().spawn(l, Firework.class); FireworkMeta fwm = fw.getFireworkMeta(); Random r = new Random();
+        fwm.addEffect(FireworkEffect.builder().withColor(Color.fromRGB(r.nextInt(255), r.nextInt(255), r.nextInt(255))).flicker(true).trail(true).with(FireworkEffect.Type.BALL_LARGE).build());
+        fwm.setPower(p); fw.setFireworkMeta(fwm);
+    }
+
+    public boolean isCommandDisabled(Player p, String c) {
+        TeamData t = teamManager.getTeamByPlayer(p.getUniqueId()); if (t == null) return false; String cl = c.startsWith("/") ? c.toLowerCase() : "/" + c.toLowerCase();
+        return activeWars.values().stream().anyMatch(w -> w.getStatus() == WarStatus.ONGOING && w.isParticipant(t.getName()) && (cl.startsWith("/spawn") || cl.startsWith("/team home") || cl.startsWith("/tp")));
+    }
+
+    public void setPlayerBossBarVisible(Player p, boolean v) { if (v) { playersHidingBossBar.remove(p.getUniqueId()); if (countdownBar != null) countdownBar.addPlayer(p); } else { playersHidingBossBar.add(p.getUniqueId()); if (countdownBar != null) countdownBar.removePlayer(p); } }
+    public void setFlagLocation(String t, Location l) { List<Location> ls = flagLocations.getOrDefault(t.toLowerCase(), new ArrayList<>()); ls.add(l); flagLocations.put(t.toLowerCase(), ls); saveFlagLocation(t, l); }
+    public List<Location> getFlagLocations(String t) { return flagLocations.getOrDefault(t.toLowerCase(), new ArrayList<>()); }
+    public WarData getWar(String t1, String t2) { return activeWars.get(getWarKey(t1, t2)); }
+    public Collection<WarData> getActiveWars() { return activeWars.values(); }
+    public void setBossBarVisible(boolean v) { if (countdownBar != null) countdownBar.setVisible(v); }
+    public boolean forceBossBarDerogation() { if (countdownBar != null) { if (currentCountdownTask != null) currentCountdownTask.cancel(); countdownBar.setTitle(getMessage("assault-ready")); countdownBar.setProgress(1.0); assaultReady = true; return true; } return false; }
+    public void forceStartAssault(WarData war) { if (currentCountdownTask != null) currentCountdownTask.cancel(); if (countdownBar != null) countdownBar.removeAll(); war.setStatus(WarStatus.ONGOING); saveWarData(war); startAssault(war); assaultReady = false; }
+    private int getOnlineCount(String t) { TeamData team = teamManager.getTeamByName(t); return (int) (team == null ? 0 : team.getMembers().stream().filter(uuid -> Bukkit.getPlayer(uuid) != null).count()); }
+    private void playSoundToTeams(WarData war, Sound s, float v, float p) { Bukkit.getOnlinePlayers().stream().filter(pl -> { TeamData t = teamManager.getTeamByPlayer(pl.getUniqueId()); return t != null && (t.getName().equalsIgnoreCase(war.getTeam1Name()) || t.getName().equalsIgnoreCase(war.getTeam2Name())); }).forEach(pl -> pl.playSound(pl.getLocation(), s, v, p)); }
+
+    // Database
+    private void createWarSchema(Connection conn) throws SQLException {
+        try (Statement s = conn.createStatement()) {
+            s.execute("CREATE TABLE IF NOT EXISTS wars (team1_name VARCHAR(64), team2_name VARCHAR(64), reason TEXT, status VARCHAR(32), reward TEXT, total_assaults INT, team1_points INT, team2_points INT, team1_manches INT, team2_manches INT, current_assault INT, points_to_win_assault INT, created_at DATETIME NULL)");
+            s.execute("CREATE TABLE IF NOT EXISTS war_flags (team_name VARCHAR(64), world VARCHAR(64), x DOUBLE, y DOUBLE, z DOUBLE, yaw FLOAT, pitch FLOAT)");
+            String[] cols = { "ALTER TABLE wars ADD COLUMN IF NOT EXISTS team1_manches INT NOT NULL DEFAULT 0", "ALTER TABLE wars ADD COLUMN IF NOT EXISTS team2_manches INT NOT NULL DEFAULT 0", "ALTER TABLE wars ADD COLUMN IF NOT EXISTS points_to_win_assault INT NOT NULL DEFAULT 25" };
+            for (String sql : cols) { try { s.execute(sql); } catch (SQLException ignored) {} }
+        }
+    }
+    private void loadWarData() { try (Connection conn = plugin.getDatabaseService().getConnection()) { createWarSchema(conn); try (ResultSet rs = conn.prepareStatement("SELECT * FROM wars").executeQuery()) { while (rs.next()) { WarData w = new WarData(rs.getString("team1_name"), rs.getString("team2_name"), rs.getString("reason")); w.setStatus(WarStatus.valueOf(rs.getString("status"))); w.setReward(rs.getString("reward")); w.setTotalAssaults(rs.getInt("total_assaults")); w.setTeam1Points(rs.getInt("team1_points")); w.setTeam2Points(rs.getInt("team2_points")); w.setTeam1Manches(rs.getInt("team1_manches")); w.setTeam2Manches(rs.getInt("team2_manches")); w.setCurrentAssault(rs.getInt("current_assault")); w.setPointsToWinAssault(rs.getInt("points_to_win_assault")); activeWars.put(getWarKey(w.getTeam1Name(), w.getTeam2Name()), w); } } try (ResultSet rs = conn.prepareStatement("SELECT * FROM war_flags").executeQuery()) { while (rs.next()) { String t = rs.getString("team_name").toLowerCase(); World w = Bukkit.getWorld(rs.getString("world")); if (w != null) { List<Location> ls = flagLocations.getOrDefault(t, new ArrayList<>()); ls.add(new Location(w, rs.getDouble("x"), rs.getDouble("y"), rs.getDouble("z"), rs.getFloat("yaw"), rs.getFloat("pitch"))); flagLocations.put(t, ls); } } } } catch (SQLException e) { plugin.getLogger().severe("DB Error: " + e.getMessage()); } }
+    private void saveWarData(WarData w) { try (Connection conn = plugin.getDatabaseService().getConnection(); PreparedStatement ps = conn.prepareStatement("INSERT INTO wars (team1_name, team2_name, reason, status, reward, total_assaults, team1_points, team2_points, team1_manches, team2_manches, current_assault, points_to_win_assault, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?, CURRENT_TIMESTAMP) ON DUPLICATE KEY UPDATE status=VALUES(status), reward=VALUES(reward), total_assaults=VALUES(total_assaults), team1_points=VALUES(team1_points), team2_points=VALUES(team2_points), team1_manches=VALUES(team1_manches), team2_manches=VALUES(team2_manches), current_assault=VALUES(current_assault), points_to_win_assault=VALUES(points_to_win_assault)")) { ps.setString(1, w.getTeam1Name()); ps.setString(2, w.getTeam2Name()); ps.setString(3, w.getReason()); ps.setString(4, w.getStatus().name()); ps.setString(5, w.getReward()); ps.setInt(6, w.getTotalAssaults()); ps.setInt(7, w.getTeam1Points()); ps.setInt(8, w.getTeam2Points()); ps.setInt(9, w.getTeam1Manches()); ps.setInt(10, w.getTeam2Manches()); ps.setInt(11, w.getCurrentAssault()); ps.setInt(12, w.getPointsToWinAssault()); ps.executeUpdate(); } catch (SQLException e) { plugin.getLogger().severe("DB Save Error: " + e.getMessage()); } }
+    private void deleteWarData(WarData w) { try (Connection conn = plugin.getDatabaseService().getConnection(); PreparedStatement ps = conn.prepareStatement("DELETE FROM wars WHERE team1_name=? AND team2_name=?")) { ps.setString(1, w.getTeam1Name()); ps.setString(2, w.getTeam2Name()); ps.executeUpdate(); } catch (SQLException e) { plugin.getLogger().severe("DB Delete Error: " + e.getMessage()); } }
+    private void saveFlagLocation(String t, Location l) { try (Connection conn = plugin.getDatabaseService().getConnection(); PreparedStatement ps = conn.prepareStatement("INSERT INTO war_flags VALUES (?,?,?,?,?,?,?)")) { ps.setString(1, t.toLowerCase()); ps.setString(2, l.getWorld().getName()); ps.setDouble(3, l.getX()); ps.setDouble(4, l.getY()); ps.setDouble(5, l.getZ()); ps.setFloat(6, l.getYaw()); ps.setFloat(7, l.getPitch()); ps.executeUpdate(); } catch (SQLException e) { plugin.getLogger().severe("DB Flag Error: " + e.getMessage()); } }
+    public void removeFlagLocation(String t) { flagLocations.remove(t.toLowerCase()); try (Connection conn = plugin.getDatabaseService().getConnection(); PreparedStatement ps = conn.prepareStatement("DELETE FROM war_flags WHERE team_name=?")) { ps.setString(1, t.toLowerCase()); ps.executeUpdate(); } catch (SQLException e) { plugin.getLogger().severe("DB Flag Delete Error: " + e.getMessage()); } }
+}

@@ -1,0 +1,47 @@
+war:
+  # Nombre de joueurs minimum par équipe pour lancer un assaut
+  min-players-per-team: 3
+  # Durée du compte à rebours de PRÉPARATION (en minutes)
+  countdown-minutes: 10
+
+  # Objectif de points pour gagner UNE manche
+  points-to-win-assault: 25
+
+  # Configuration de la bannière
+  flag:
+    glow-radius: 8000
+    effects:
+      - "SLOWNESS:1"
+      - "WEAKNESS:1"
+      - "GLOWING:1"
+
+  # Points accordés (ces valeurs sont affichées dans le chat)
+  points:
+    flag-capture: 10
+    kill: 3
+
+  # Désactivation des commandes pendant l'assaut
+  disabled-commands:
+    - "/tp"
+    - "/team home"
+    - "/spawn"
+
+messages:
+  war-declared: "§6Une guerre a été déclarée entre §e%team1% §6et §e%team2%§6. Raison: §f%reason%"
+  war-accepted: "§6La guerre entre §e%team1% §6et §e%team2% §6a été acceptée ! Début dans %time% minutes."
+  war-reward: "§aRécompense pour les gagnants : §f%reward%"
+  rules-reminder: "§cRappel des règles : Aucun kill extérieur, aucun grief ou vol."
+  countdown-bossbar: "§6Attente de l'assaut : §e%time%"
+  waiting-for-players: "§bAttente des %min_players% joueurs minimum de chaque équipe..."
+  assault-ready: "§a§lL'assaut est prêt ! Un membre de l'équipe peut faire §e/assault §apour commencer !"
+  assault-started: "§c§lL'ASSAUT COMMENCE ! §6Récupérez les bannières adverses !"
+  
+  # Messages de gain de points
+  point-gain-flag: "§6[Guerre] §e%player% §6a rapporté une bannière ! §a+%points% pts §6pour §e%team%§6 !"
+  point-gain-kill: "§6[Guerre] §e%killer% §6a éliminé §e%victim%§6 ! §a+%points% pts §6pour §e%team%§6 !"
+  
+  manche-victory: "§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n       §e§l%team% A REMPORTÉ LA MANCHE !\n\n§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  
+  victory: "§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n       §6§lVICTOIRE DE L'ÉQUIPE §e§l%team%\n\n       §aRécompense : §f%reward%\n\n§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  command-blocked: "§c%player% a essayé de quitter le combat avec la commande %command%."
+  tie-breaker: "§6Égalité ! Une manche bonus de départage va avoir lieu."

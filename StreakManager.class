@@ -1,0 +1,49 @@
+package fr.timeo.lumidiscord.models;
+
+public class XpBufferState {
+    private final String uuid;
+    private int pendingXp;
+    private int messageCount;
+    private int voiceSeconds;
+    private int playtimeSecondsXp;
+
+    public XpBufferState(String uuid) {
+        this.uuid = uuid;
+    }
+
+    public String getUuid() {
+        return uuid;
+    }
+
+    public int getPendingXp() {
+        return pendingXp;
+    }
+
+    public void setPendingXp(int pendingXp) {
+        this.pendingXp = pendingXp;
+    }
+
+    public int getMessageCount() {
+        return messageCount;
+    }
+
+    public void setMessageCount(int messageCount) {
+        this.messageCount = messageCount;
+    }
+
+    public int getVoiceSeconds() {
+        return voiceSeconds;
+    }
+
+    public void setVoiceSeconds(int voiceSeconds) {
+        this.voiceSeconds = voiceSeconds;
+    }
+
+    public int getPlaytimeSecondsXp() {
+        return playtimeSecondsXp;
+    }
+
+    public void setPlaytimeSecondsXp(int playtimeSecondsXp) {
+        this.playtimeSecondsXp = playtimeSecondsXp;
+    }
+}

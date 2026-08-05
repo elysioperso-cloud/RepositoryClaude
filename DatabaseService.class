@@ -1,0 +1,131 @@
+package fr.timeo.lumidiscord.minecraft.war;
+
+import fr.timeo.lumidiscord.LumiDiscord;
+import fr.timeo.lumidiscord.minecraft.team.TeamData;
+import fr.timeo.lumidiscord.minecraft.team.TeamManager;
+import org.bukkit.ChatColor;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
+import org.bukkit.entity.Player;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
+
+public class WarCommand implements CommandExecutor, TabCompleter {
+    private final LumiDiscord plugin;
+    private final WarManager warManager;
+    private final TeamManager teamManager;
+
+    public WarCommand(LumiDiscord plugin, WarManager warManager, TeamManager teamManager) {
+        this.plugin = plugin;
+        this.warManager = warManager;
+        this.teamManager = teamManager;
+    }
+
+    @Override
+    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (label.equalsIgnoreCase("war")) {
+            if (!sender.hasPermission("lumidiscord.admin")) { sender.sendMessage(ChatColor.RED + "Pas de permission."); return true; }
+            if (args.length < 1) return false;
+
+            if (args[0].equalsIgnoreCase("set")) {
+                if (args.length < 3 || !(sender instanceof Player player)) {
+                    sender.sendMessage(ChatColor.RED + "Usage: /war set [nom_banniere] [team_name]");
+                    return true;
+                }
+                warManager.setFlagLocation(args[2], player.getLocation());
+                sender.sendMessage(ChatColor.GREEN + "Bannière pour " + args[2] + " définie !");
+            } else if (args[0].equalsIgnoreCase("accept")) {
+                if (args.length < 4) {
+                    sender.sendMessage(ChatColor.RED + "Usage: /war accept [recompense...] [team1] [team2] [derogation]");
+                    return true;
+                }
+                boolean derogation = args[args.length - 1].equalsIgnoreCase("derogation");
+                int lastMetaIdx = derogation ? args.length - 3 : args.length - 2;
+                String team1Name = args[lastMetaIdx];
+                String team2Name = args[lastMetaIdx + 1];
+                String reward = String.join(" ", Arrays.copyOfRange(args, 1, lastMetaIdx));
+                if (reward.isEmpty()) { sender.sendMessage(ChatColor.RED + "Précisez une récompense."); return true; }
+                WarData war = warManager.getWar(team1Name, team2Name);
+                if (war == null) { sender.sendMessage(ChatColor.RED + "Aucune demande trouvée entre " + team1Name + " et " + team2Name); return true; }
+                if (!warManager.canAcceptWar(team1Name, team2Name, (Player) sender)) return true;
+                warManager.acceptWar(war, reward, derogation);
+                sender.sendMessage(ChatColor.GREEN + "Guerre acceptée" + (derogation ? " avec dérogation." : "."));
+            } else if (args[0].equalsIgnoreCase("endwar")) {
+                if (args.length < 2) { sender.sendMessage(ChatColor.RED + "Usage: /war endwar [team]"); return true; }
+                WarData war = warManager.getActiveWars().stream().filter(w -> w.isParticipant(args[1])).findFirst().orElse(null);
+                if (war != null) {
+                    warManager.forceEndWarNoWinner(war);
+                    sender.sendMessage(ChatColor.YELLOW + "Guerre terminée de force sans gagnant.");
+                } else {
+                    sender.sendMessage(ChatColor.RED + "Aucune guerre active pour cette team.");
+                }
+            } else if (args[0].equalsIgnoreCase("bossbar")) {
+                if (args.length < 2) { sender.sendMessage(ChatColor.RED + "Usage: /war bossbar [hide|show|derogation]"); return true; }
+                if (args[1].equalsIgnoreCase("hide") && sender instanceof Player) { warManager.setPlayerBossBarVisible((Player) sender, false); sender.sendMessage(ChatColor.GREEN + "BossBar cachée pour vous."); }
+                else if (args[1].equalsIgnoreCase("show") && sender instanceof Player) { warManager.setPlayerBossBarVisible((Player) sender, true); sender.sendMessage(ChatColor.GREEN + "BossBar affichée pour vous."); }
+                else if (args[1].equalsIgnoreCase("derogation")) {
+                    if (warManager.forceBossBarDerogation()) sender.sendMessage(ChatColor.GREEN + "Dérogation appliquée !");
+                    else sender.sendMessage(ChatColor.RED + "Aucun countdown actif.");
+                }
+            } else if (args[0].equalsIgnoreCase("forceassault")) {
+                if (args.length < 3) { sender.sendMessage(ChatColor.RED + "Usage: /war forceassault [team1] [team2]"); return true; }
+                WarData war = warManager.getWar(args[1], args[2]);
+                if (war != null) { warManager.forceStartAssault(war); sender.sendMessage(ChatColor.GREEN + "Assaut forcé !"); }
+                else { sender.sendMessage(ChatColor.RED + "Guerre introuvable."); }
+            } else if (args[0].equalsIgnoreCase("assault")) {
+                if (args.length < 5 || !args[1].equalsIgnoreCase("set")) { sender.sendMessage(ChatColor.RED + "Usage: /war assault set [nombre] [team1] [team2]"); return true; }
+                WarData war = warManager.getWar(args[3], args[4]);
+                if (war != null) { war.setTotalAssaults(Integer.parseInt(args[2])); sender.sendMessage(ChatColor.GREEN + "Nombre d'assauts mis à " + args[2]); }
+            } else if (args[0].equalsIgnoreCase("stats")) {
+                if (args.length < 4) { sender.sendMessage(ChatColor.RED + "Usage: /war stats modify [team] [points]"); return true; }
+                TeamData team = teamManager.getTeamByName(args[2]);
+                if (team != null) {
+                    warManager.getActiveWars().stream().filter(w -> w.isParticipant(team.getName())).findFirst().ifPresent(w -> {
+                        try {
+                            int p = Integer.parseInt(args[3]);
+                            if (w.getTeam1Name().equalsIgnoreCase(team.getName())) w.setTeam1Points(p); else w.setTeam2Points(p);
+                            sender.sendMessage(ChatColor.GREEN + "Points de " + team.getName() + " mis à " + p);
+                            warManager.checkInstantScore(w); // Vérification immédiate du score
+                        } catch (NumberFormatException e) { sender.sendMessage(ChatColor.RED + "Nombre invalide."); }
+                    });
+                }
+            }
+            return true;
+        }
+        if (label.equalsIgnoreCase("assault")) {
+            if (!(sender instanceof Player player)) return true;
+            if (args.length >= 2 && args[0].equalsIgnoreCase("bossbar")) {
+                if (args[1].equalsIgnoreCase("hide")) { warManager.setPlayerBossBarVisible(player, false); player.sendMessage(ChatColor.GREEN + "BossBar cachée."); }
+                else if (args[1].equalsIgnoreCase("show")) { warManager.setPlayerBossBarVisible(player, true); player.sendMessage(ChatColor.GREEN + "BossBar affichée."); }
+                return true;
+            }
+            warManager.triggerAssault(player);
+            return true;
+        }
+        return true;
+    }
+
+    @Override
+    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        if (alias.equalsIgnoreCase("war")) {
+            if (args.length == 1) return List.of("set", "accept", "assault", "stats", "forceassault", "bossbar", "endwar");
+            if (args.length == 3 && args[0].equalsIgnoreCase("set")) return teamNames();
+            if (args[0].equalsIgnoreCase("accept")) return teamNames();
+            if (args[0].equalsIgnoreCase("endwar")) return teamNames();
+            if (args[0].equalsIgnoreCase("forceassault") && (args.length == 2 || args.length == 3)) return teamNames();
+            if (args[0].equalsIgnoreCase("stats") && args.length == 3) return teamNames();
+            if (args[0].equalsIgnoreCase("assault") && (args.length == 4 || args.length == 5)) return teamNames();
+            if (args.length == 2 && args[0].equalsIgnoreCase("bossbar")) return List.of("hide", "show", "derogation");
+        }
+        if (alias.equalsIgnoreCase("assault")) {
+            if (args.length == 1) return List.of("bossbar");
+            if (args.length == 2 && args[0].equalsIgnoreCase("bossbar")) return List.of("hide", "show");
+        }
+        return null;
+    }
+    private List<String> teamNames() { return teamManager.getAllTeams().stream().map(TeamData::getName).collect(Collectors.toList()); }
+}

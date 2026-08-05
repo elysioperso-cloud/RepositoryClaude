@@ -1,0 +1,197 @@
+package fr.timeo.lumidiscord.minecraft.team.gui;
+
+import fr.timeo.lumidiscord.LumiDiscord;
+import fr.timeo.lumidiscord.minecraft.team.*;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.minimessage.MiniMessage;
+import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
+import org.bukkit.Material;
+import org.bukkit.OfflinePlayer;
+import org.bukkit.enchantments.Enchantment;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryHolder;
+import org.bukkit.inventory.ItemFlag;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.SkullMeta;
+import org.jetbrains.annotations.NotNull;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+public class TeamPanelGui implements InventoryHolder {
+
+    private final LumiDiscord plugin;
+    private TeamData team;
+    private final MiniMessage mm = MiniMessage.miniMessage();
+    private final Inventory inventory;
+    private int currentPage = 0; 
+    private TeamRole editingRole = null;
+    private UUID selectingMember = null;
+
+    public TeamPanelGui(LumiDiscord plugin, TeamData team) {
+        this.plugin = plugin;
+        this.team = team;
+        this.inventory = Bukkit.createInventory(this, 54, Component.text("Faction : " + team.getName()));
+    }
+
+    public void open(Player player) { drawPage(0, player); player.openInventory(inventory); }
+
+    public void drawPage(int pageId, Player viewer) {
+        this.currentPage = pageId; inventory.clear();
+        ItemStack background = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
+        ItemMeta bgMeta = background.getItemMeta();
+        if(bgMeta != null) { bgMeta.displayName(Component.empty()); background.setItemMeta(bgMeta); }
+        for (int i = 0; i < 9; i++) inventory.setItem(i, background);
+
+        drawNavItem(1, Material.BEACON, "<gold>Informations", pageId == 0);
+        drawNavItem(2, Material.CHEST, "<green>Coffre", pageId == 1);
+        drawNavItem(3, Material.WRITABLE_BOOK, "<aqua>Quêtes", pageId == 2);
+        drawNavItem(5, Material.PLAYER_HEAD, "<yellow>Membres", pageId == 3 || pageId == 7 || pageId == 8);
+        drawNavItem(6, Material.COMMAND_BLOCK, "<red>Grades", pageId == 4 || pageId == 5);
+        drawNavItem(7, Material.NETHER_STAR, "<light_purple>Améliorations", pageId == 9);
+
+        switch (pageId) {
+            case 0 -> drawInfoPage(viewer);
+            case 1 -> drawChestPage();
+            case 2 -> drawQuestPage();
+            case 3 -> drawMembersPage();
+            case 4 -> drawRolesListPage();
+            case 5 -> drawRoleEditPage();
+            case 8 -> drawInviteSelectorPage();
+            case 9 -> drawUpgradesPage();
+        }
+    }
+
+    private void drawNavItem(int slot, Material mat, String name, boolean active) {
+        ItemStack item = new ItemStack(mat); ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.displayName(mm.deserialize("<!italic>" + name + (active ? " <white>(Actif)" : "")));
+            if (active) { meta.addEnchant(Enchantment.UNBREAKING, 1, true); meta.addItemFlags(ItemFlag.HIDE_ENCHANTS); }
+            item.setItemMeta(meta);
+        }
+        inventory.setItem(slot, item);
+    }
+
+    private void drawInfoPage(Player viewer) {
+        int online = (int) team.getMembers().stream().map(Bukkit::getPlayer).filter(p -> p != null && p.isOnline()).count();
+        long nextXp = plugin.getTeamManager().getXpRequiredForNextLevel(team.getLevel());
+        setItem(22, mm.deserialize("<!italic><gold>Statistiques"), Material.BOOK, List.of(
+            mm.deserialize("<!italic><gray>Faction: <aqua>" + team.getName()),
+            mm.deserialize("<!italic><gray>Chef: <gold>" + Bukkit.getOfflinePlayer(team.getLeader()).getName()),
+            mm.deserialize("<!italic><gray>Niveau: <green>" + team.getLevel()),
+            mm.deserialize("<!italic><gray>XP: <yellow>" + team.getXp() + " / " + nextXp),
+            mm.deserialize("<!italic><gray>En ligne: <green>" + online + " / " + team.getMembers().size())
+        ));
+    }
+
+    private void drawChestPage() {
+        ItemStack filler = new ItemStack(Material.GRAY_STAINED_GLASS_PANE); // VITRES GRISES
+        ItemMeta fm = filler.getItemMeta(); if(fm!=null) { fm.displayName(Component.empty()); filler.setItemMeta(fm); }
+        for (int i = 9; i < 18; i++) inventory.setItem(i, filler);
+
+        for (int i = 0; i < 36; i++) {
+            int slot = i + 18;
+            if (i < team.getChestSlots()) inventory.setItem(slot, team.getChestItems().getOrDefault(i, new ItemStack(Material.AIR)));
+            else setItem(slot, mm.deserialize("<!italic><red>Slot Bloqué"), Material.BLACK_STAINED_GLASS_PANE, List.of(mm.deserialize("<!italic><gray>Cliquer avec 1 Bloc Netherite")));
+        }
+    }
+
+    private void drawQuestPage() {
+        TeamQuest quest = team.getActiveQuest();
+        if (quest == null) setItem(31, mm.deserialize("<!italic><red>Aucune quête actuelle"), Material.BARRIER, null);
+        else setItem(31, mm.deserialize("<!italic><gold>RÉCOLTE : " + quest.getTargetAmount() + " " + quest.getMaterial().name()), quest.getMaterial(), List.of(mm.deserialize("<!italic><gray>Récompense : <green>" + quest.getRewardDescription())));
+    }
+
+    private void drawMembersPage() {
+        int slot = 18;
+        for (UUID uuid : team.getMembers()) {
+            if (slot >= 53) break;
+            OfflinePlayer op = Bukkit.getOfflinePlayer(uuid);
+            ItemStack head = new ItemStack(Material.PLAYER_HEAD);
+            SkullMeta meta = (SkullMeta) head.getItemMeta();
+            if(meta!=null) {
+                meta.setOwningPlayer(op);
+                String rName;
+                if (uuid.equals(team.getLeader())) {
+                    rName = "Owner";
+                } else {
+                    TeamRole playerRole = team.getPlayerRole(uuid);
+                    rName = (playerRole != null) ? playerRole.getName() : "Membre";
+                }
+                meta.displayName(mm.deserialize("<!italic><yellow>" + op.getName()));
+                meta.lore(List.of(mm.deserialize("<!italic><gray>Grade: " + (uuid.equals(team.getLeader()) ? "<red>" : "<aqua>") + rName)));
+                head.setItemMeta(meta);
+            }
+            inventory.setItem(slot++, head);
+        }
+        setItem(53, mm.deserialize("<!italic><green>Inviter"), Material.FEATHER, null);
+    }
+
+    private void drawRolesListPage() {
+        int slot = 18;
+        setItem(53, mm.deserialize("<!italic><green>Créer un Grade"), Material.ANVIL, null);
+        for (TeamRole role : team.getRoles().values()) setItem(slot++, mm.deserialize("<!italic><aqua>Grade: " + role.getName()), Material.PAPER, List.of(mm.deserialize("<!italic><yellow>Cliquer pour configurer")));
+    }
+
+    private void drawRoleEditPage() {
+        if (editingRole == null) return;
+        inventory.clear();
+
+        // Background and navbar
+        ItemStack background = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
+        ItemMeta bgMeta = background.getItemMeta();
+        if(bgMeta != null) { bgMeta.displayName(Component.empty()); background.setItemMeta(bgMeta); }
+        for (int i = 0; i < 9; i++) inventory.setItem(i, background);
+        drawNavItem(6, Material.COMMAND_BLOCK, "<red>Grades", true);
+
+
+        int slot = 18;
+        for (TeamPermission perm : TeamPermission.values()) {
+            boolean has = editingRole.hasPermission(perm);
+            Material mat = has ? Material.LIME_CONCRETE : Material.RED_CONCRETE;
+            List<Component> lore = new ArrayList<>();
+            lore.add(mm.deserialize("<!italic><gray>Cliquez pour " + (has ? "désactiver" : "activer")));
+            lore.add(mm.deserialize("<!italic><gray>Statut: " + (has ? "<green>Activé" : "<red>Désactivé")));
+
+            setItem(slot++, mm.deserialize("<!italic><white>" + perm.getDescription()), mat, lore);
+        }
+        setItem(49, mm.deserialize("<!italic><aqua>Changer le nom"), Material.NAME_TAG, null);
+        setItem(45, mm.deserialize("<!italic><gray>Retour"), Material.ARROW, null);
+    }
+
+    private void drawInviteSelectorPage() {
+        int slot = 18;
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            if (slot >= 54) break;
+            if (plugin.getTeamManager().getTeamByPlayer(p.getUniqueId()) != null) continue;
+            ItemStack head = new ItemStack(Material.PLAYER_HEAD);
+            SkullMeta meta = (SkullMeta) head.getItemMeta();
+            if(meta!=null) { meta.setOwningPlayer(p); meta.displayName(mm.deserialize("<!italic><yellow>" + p.getName())); head.setItemMeta(meta); }
+            inventory.setItem(slot++, head);
+        }
+        setItem(45, mm.deserialize("<!italic><gray>Retour"), Material.ARROW, null);
+    }
+
+    private void drawUpgradesPage() {
+        setItem(22, mm.deserialize("<!italic><red>Améliorations"), Material.BARRIER, List.of(mm.deserialize("<!italic><gray><i>Aucune amélioration disponible pour vous pour le moment...")));
+        setItem(45, mm.deserialize("<!italic><gray>Retour"), Material.ARROW, null);
+    }
+
+    private void setItem(int slot, Component name, Material mat, List<Component> lore) {
+        ItemStack item = new ItemStack(mat); ItemMeta meta = item.getItemMeta();
+        if (meta != null) { meta.displayName(name); if (lore != null) meta.lore(lore); item.setItemMeta(meta); }
+        inventory.setItem(slot, item);
+    }
+
+    @Override public @NotNull Inventory getInventory() { return inventory; }
+    public TeamData getTeam() { return team; }
+    public int getCurrentPage() { return currentPage; }
+    public TeamRole getEditingRole() { return editingRole; }
+    public void setEditingRole(TeamRole r) { this.editingRole = r; }
+    public void setSelectingMember(UUID m) { this.selectingMember = m; }
+    public void setTeam(TeamData team) { this.team = team; }
+}

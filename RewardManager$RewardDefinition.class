@@ -1,0 +1,62 @@
+package fr.timeo.lumidiscord.models;
+
+import java.sql.Timestamp;
+import java.util.UUID;
+
+public class PlayerProfile {
+    private final UUID uuid;
+    private String username;
+    private String discordId;
+    private long xp;
+    private int level;
+    private Timestamp lastJoin;
+
+    public PlayerProfile(UUID uuid, String username) {
+        this.uuid = uuid;
+        this.username = username;
+    }
+
+    public UUID getUuid() {
+        return uuid;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public String getDiscordId() {
+        return discordId;
+    }
+
+    public void setDiscordId(String discordId) {
+        this.discordId = discordId;
+    }
+
+    public long getXp() {
+        return xp;
+    }
+
+    public void setXp(long xp) {
+        this.xp = xp;
+    }
+
+    public int getLevel() {
+        return level;
+    }
+
+    public void setLevel(int level) {
+        this.level = level;
+    }
+
+    public Timestamp getLastJoin() {
+        return lastJoin;
+    }
+
+    public void setLastJoin(Timestamp lastJoin) {
+        this.lastJoin = lastJoin;
+    }
+}

@@ -1,0 +1,85 @@
+package fr.timeo.lumidiscord.models;
+
+public class PlayerStats {
+    private final String uuid;
+    private long playtimeSeconds;
+    private long blocksBroken;
+    private long blocksPlaced;
+    private double distanceTraveled;
+    private int deaths;
+    private long itemsCrafted;
+    private int mobsKilled;
+    private long jumps;
+
+    public PlayerStats(String uuid) {
+        this.uuid = uuid;
+    }
+
+    public String getUuid() {
+        return uuid;
+    }
+
+    public long getPlaytimeSeconds() {
+        return playtimeSeconds;
+    }
+
+    public void setPlaytimeSeconds(long playtimeSeconds) {
+        this.playtimeSeconds = playtimeSeconds;
+    }
+
+    public long getBlocksBroken() {
+        return blocksBroken;
+    }
+
+    public void setBlocksBroken(long blocksBroken) {
+        this.blocksBroken = blocksBroken;
+    }
+
+    public long getBlocksPlaced() {
+        return blocksPlaced;
+    }
+
+    public void setBlocksPlaced(long blocksPlaced) {
+        this.blocksPlaced = blocksPlaced;
+    }
+
+    public double getDistanceTraveled() {
+        return distanceTraveled;
+    }
+
+    public void setDistanceTraveled(double distanceTraveled) {
+        this.distanceTraveled = distanceTraveled;
+    }
+
+    public int getDeaths() {
+        return deaths;
+    }
+
+    public void setDeaths(int deaths) {
+        this.deaths = deaths;
+    }
+
+    public long getItemsCrafted() {
+        return itemsCrafted;
+    }
+
+    public void setItemsCrafted(long itemsCrafted) {
+        this.itemsCrafted = itemsCrafted;
+    }
+
+    public int getMobsKilled() {
+        return mobsKilled;
+    }
+
+    public void setMobsKilled(int mobsKilled) {
+        this.mobsKilled = mobsKilled;
+    }
+
+    public long getJumps() {
+        return jumps;
+    }
+
+    public void setJumps(long jumps) {
+        this.jumps = jumps;
+    }
+}

@@ -1,0 +1,8 @@
+package fr.timeo.lumidiscord.minecraft.war;
+
+public enum WarStatus {
+    REQUESTED,
+    ACCEPTED,
+    ONGOING,
+    FINISHED
+}

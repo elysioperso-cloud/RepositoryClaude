@@ -1,0 +1,19 @@
+package fr.timeo.lumidiscord.models;
+
+public enum XpSource {
+    PLAYTIME("xp_from_playtime"),
+    VOICE("xp_from_voice"),
+    MESSAGES("xp_from_messages"),
+    DAILY("xp_from_daily"),
+    ADMIN("xp_from_admin");
+
+    private final String column;
+
+    XpSource(String column) {
+        this.column = column;
+    }
+
+    public String getColumn() {
+        return column;
+    }
+}
